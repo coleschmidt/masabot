@@ -10,7 +10,7 @@ import time
 import random
 import re
 import shlex
-from . import configfile, commands, util, version, settings
+from . import configfile, commands, util, version, settings, ipc
 from typing import Optional
 from .util import BotSyntaxError, BotModuleError, BotPermissionError, MessageMetadata, DiscordPager
 
@@ -206,6 +206,7 @@ class MasaBot(object):
 		""":type : list[Timer]"""
 		self._setup_complete = False
 		self._master_timer_task = None
+		self._ipc_listener_task = None
 
 		# default replacements; will be overridden if present in state file
 		self._invocation_replacements = {
@@ -325,10 +326,16 @@ class MasaBot(object):
 		"""
 		Begin execution of bot. Blocks until complete.
 		"""
+		server = ipc.MasaprotoServer('127.0.0.1', 3140, self._handle_masaproto_message)
 		_log.info("Connecting...")
 		# WARNING! WE REMOVED client.close() HERE.
 		self._master_timer_task = self._client.loop.create_task(self._run_timer())
+		self._ipc_listener_task = self._client.loop.create_task(server.start())
 		self._client.run(self._api_key)
+
+	def _handle_masaproto_message(self, message, peer_info):
+		_log.debug("Received message from %s: %s", message, peer_info)
+		return ipc.ReplyMessage(ipc.MessageStatus.SUCCESS, "The message was successfully received"), False
 
 	async def announce(self, message):
 		"""
@@ -607,6 +614,7 @@ class MasaBot(object):
 		await self.reply(context, "Right away, <@!" + str(context.author.id) + ">! See you later!")
 		_log.info("Shutting down...")
 		self._master_timer_task.cancel()
+		self._ipc_listener_task.cancel()
 		await self._client.logout()
 
 	async def show_version(self, context):
