@@ -328,7 +328,11 @@ class MasaBot(object):
 		"""
 		server = ipc.MasaprotoServer('127.0.0.1', 3140, self._handle_masaproto_message)
 		_log.info("Connecting...")
-		# WARNING! WE REMOVED client.close() HERE.
+		# windows has odd behavior with asyncio, and likes to not work for a ctrl-c.
+		if os.name == 'nt':
+			def windows_wakeup():
+				self._client.loop.call_later(0.1, windows_wakeup)
+			self._client.loop.call_later(0.1, windows_wakeup)
 		self._master_timer_task = self._client.loop.create_task(self._run_timer())
 		self._ipc_listener_task = self._client.loop.create_task(server.start())
 		self._client.run(self._api_key)

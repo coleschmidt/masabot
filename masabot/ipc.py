@@ -50,7 +50,7 @@ class Message:
 	def _encode_args(self) -> bytes:
 		return bytes()
 
-	def str(self):
+	def __str__(self):
 		return "<Message v{:d} type={:s}>".format(self.version, self.type.name)
 
 
@@ -81,10 +81,11 @@ class ReplyMessage(Message):
 
 
 def _decode_reply_message(version: int, remaining_bytes: bytes) -> ReplyMessage:
-	status, info_size = struct.unpack('>II', remaining_bytes)
+	unpack_size = struct.calcsize('>II')
+	status, info_size = struct.unpack('>II', remaining_bytes[:unpack_size])
 	info = None
 	if info_size > 0:
-		str_bytes = remaining_bytes[struct.calcsize('>II'):info_size]
+		str_bytes = remaining_bytes[unpack_size:unpack_size + info_size]
 		info = str_bytes.decode('utf-8')
 	return ReplyMessage(status, info, version)
 
@@ -99,7 +100,7 @@ def decode_message(message_bytes: bytes) -> Message:
 	len_size = struct.calcsize('>I')
 	if len(message_bytes) < len_size:
 		raise MessageDecodingError("message length too short to be a masaproto v1 message")
-	given_length = struct.unpack('>I', message_bytes)[0]
+	given_length = struct.unpack('>I', message_bytes[:len_size])[0]
 	message_bytes = message_bytes[len_size:]
 	if given_length != len(message_bytes):
 		msg = "message length given was " + str(given_length) + " but actual length is " + str(len(message_bytes))
@@ -107,11 +108,11 @@ def decode_message(message_bytes: bytes) -> Message:
 
 	# now that we have reached the message size and validated it,
 	# we no longer need to check sizes before unpacking
-	version = struct.unpack('>I', message_bytes)[0]
+	version = struct.unpack('>I', message_bytes[:struct.calcsize('>I')])[0]
 	message_bytes = message_bytes[struct.calcsize('>I'):]
 
 	if version == 1:
-		message_type = MessageType(struct.unpack('>I', message_bytes)[0])
+		message_type = MessageType(struct.unpack('>I', message_bytes[:struct.calcsize('>I')])[0])
 		message_bytes = message_bytes[struct.calcsize('>I'):]
 
 		if message_type == MessageType.GET_REASON:
